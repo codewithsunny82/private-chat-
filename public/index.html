@@ -1,0 +1,677 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#090d19">
+<title>PrivateChat — Your Private Space</title>
+
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #090d19;
+  --panel: #11182b;
+  --panel2: #0c1222;
+  --line: #28324b;
+  --text: #eef2ff;
+  --muted: #919db8;
+  --blue: #7891ff;
+  --purple: #a16cff;
+  --green: #63e6b5;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 25px;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 8% 0%, #25356b66, transparent 38%),
+    radial-gradient(ellipse at 100% 100%, #542b7650, transparent 34%),
+    var(--bg);
+  font: 15px/1.5 Inter, system-ui, -apple-system, sans-serif;
+}
+
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+.app { width: min(1120px, 100%); margin: auto; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+
+.brand-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(140deg, #6088ff, #a16aff);
+  box-shadow: 0 8px 30px #7c70ff3b;
+  font-size: 23px;
+}
+
+.brand h1 { font-size: 22px; letter-spacing: -.7px; margin: 0; }
+.brand p { font-size: 12px; color: var(--muted); margin: 3px 0 0; }
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  padding: 9px 13px;
+  color: var(--muted);
+  background: #11182b99;
+  font-size: 11px;
+}
+
+.status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #79839b;
+  flex-shrink: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.panel {
+  border: 1px solid #899bce20;
+  border-radius: 23px;
+  overflow: hidden;
+  background: #11182be8;
+  box-shadow: 0 25px 80px #00000030;
+  backdrop-filter: blur(20px);
+}
+
+.sidebar { padding: 25px; }
+
+.eyebrow {
+  color: #9caeff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+
+.sidebar h2 {
+  font-size: 29px;
+  line-height: 1.2;
+  letter-spacing: -1px;
+  margin: 13px 0 11px;
+}
+
+.description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0 0 25px;
+}
+
+#setup { display: grid; gap: 16px; }
+
+.field { display: grid; gap: 8px; }
+
+label { color: #c8d1e8; font-size: 12px; font-weight: 600; }
+
+input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #090f1e;
+  color: var(--text);
+  padding: 13px 14px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+
+input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px #7891ff19;
+}
+
+input::placeholder { color: #67738f; }
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 13px 15px;
+  font-weight: 700;
+  transition: transform .18s, filter .18s, background .18s;
+}
+
+button:not(:disabled):hover { filter: brightness(1.1); }
+button:not(:disabled):active { transform: scale(.985); }
+
+#join, #send {
+  color: white;
+  background: linear-gradient(110deg, #597fff, #9663ed);
+  box-shadow: 0 8px 25px #7867ff25;
+}
+
+#join { margin-top: 2px; width: 100%; }
+
+.privacy-card {
+  margin-top: 24px;
+  padding: 15px;
+  border: 1px solid #839aff24;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #6485ff12, #a06bff0d);
+}
+
+.privacy-title { font-size: 12px; font-weight: 750; margin-bottom: 6px; }
+
+.hint {
+  font-size: 11px;
+  line-height: 1.75;
+  color: var(--muted);
+  margin: 0;
+}
+
+.privacy-card .hint { font-size: 11px; }
+
+.chat-panel {
+  min-width: 0;
+  min-height: 610px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header {
+  padding: 20px 23px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-person { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #283f7b, #543777);
+  font-size: 21px;
+}
+
+.chat-person h2 { font-size: 14px; margin: 0 0 4px; }
+#peerState { overflow-wrap: anywhere; }
+
+.secondary {
+  border: 1px solid #ff81912b;
+  color: #ff9da9;
+  background: #ff81910b;
+  padding: 9px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+#messages {
+  flex: 1;
+  min-height: 330px;
+  max-height: 520px;
+  padding: 23px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+
+.bubble {
+  max-width: 82%;
+  width: fit-content;
+  border: 1px solid #ffffff0c;
+  border-radius: 17px 17px 17px 5px;
+  padding: 11px 14px;
+  background: #1a243b;
+  color: #e8edfc;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  animation: rise .2s ease-out;
+}
+
+.bubble.mine {
+  align-self: flex-end;
+  border-color: #a4aaff20;
+  border-radius: 17px 17px 5px 17px;
+  background: linear-gradient(135deg, #405fd0, #6947b6);
+  color: white;
+}
+
+.system {
+  align-self: center;
+  max-width: 90%;
+  padding: 7px 12px;
+  border: 1px solid #ffffff0a;
+  border-radius: 20px;
+  background: #ffffff05;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.composer-wrap {
+  padding: 16px 20px 18px;
+  border-top: 1px solid var(--line);
+  background: #090e1a55;
+}
+
+.composer { display: flex; align-items: center; gap: 10px; }
+.composer input { flex: 1; }
+.composer button { min-width: 86px; }
+
+.composer-note {
+  margin: 10px 0 0 2px;
+  color: #7f8ba7;
+  font-size: 10px;
+}
+
+.warning {
+  max-width: 800px;
+  margin: 20px auto 0;
+  padding: 0 10px;
+  color: #a6aeca;
+  font-size: 11px;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.footer {
+  color: #697590;
+  font-size: 10px;
+  text-align: center;
+  padding: 17px 0 0;
+}
+
+[hidden] { display: none !important; }
+
+@media (max-width: 760px) {
+  body { padding: 16px 12px; }
+  .topbar { margin-bottom: 17px; }
+  .brand-icon { width: 42px; height: 42px; border-radius: 14px; }
+  .brand h1 { font-size: 19px; }
+  .brand p { font-size: 10px; }
+  .status { padding: 8px 10px; font-size: 10px; }
+  .layout { grid-template-columns: 1fr; gap: 15px; }
+  .sidebar { padding: 21px; }
+  .sidebar h2 { font-size: 26px; }
+  .chat-panel { min-height: 480px; }
+  .chat-header { padding: 15px; }
+  #messages { min-height: 260px; max-height: 48vh; padding: 17px 13px; }
+  .composer-wrap { padding: 13px; }
+  .bubble { max-width: 89%; }
+  .warning { margin-top: 15px; }
+}
+
+@media (max-width: 390px) {
+  .brand { gap: 8px; }
+  .brand p { max-width: 150px; }
+  .status { gap: 5px; padding: 7px; }
+  .chat-person { gap: 8px; }
+  .avatar { width: 38px; height: 38px; }
+  .secondary { padding: 8px; }
+  .composer { gap: 7px; }
+  .composer button { min-width: 68px; padding: 12px 10px; }
+}
+</style>
+</head>
+
+<body>
+<main class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">🔐</div>
+      <div>
+        <h1>PrivateChat</h1>
+        <p>Your conversations. Your privacy.</p>
+      </div>
+    </div>
+    <span class="status" id="status">Not connected</span>
+  </header>
+
+  <div class="layout">
+    <aside class="panel sidebar">
+      <div class="eyebrow">Your private space</div>
+      <h2>Talk freely.<br>Keep it private.</h2>
+      <p class="description">
+        A private room for two people. Messages are encrypted
+        in your browser before being sent.
+      </p>
+
+      <section id="setup">
+        <div class="field">
+          <label for="room">Private room code</label>
+          <input id="room" autocomplete="off" minlength="8" maxlength="64"
+                 placeholder="Enter a long random code">
+        </div>
+
+        <div class="field">
+          <label for="name">Your display name</label>
+          <input id="name" autocomplete="nickname" maxlength="32"
+                 placeholder="You">
+        </div>
+
+        <button id="join" type="button">Join private room&nbsp; →</button>
+
+        <p class="hint">
+          Both people must use the same room code. Share a long,
+          random code through a separate trusted channel.
+        </p>
+      </section>
+
+      <div class="privacy-card">
+        <div class="privacy-title">🛡️ Privacy matters</div>
+        <p class="hint">
+          The server relays encrypted messages. A room code is not
+          identity verification, so share it only with the intended person.
+        </p>
+      </div>
+    </aside>
+
+    <section class="panel chat-panel" id="chat" style="display:none">
+      <header class="chat-header">
+        <div class="chat-person">
+          <div class="avatar" aria-hidden="true">✦</div>
+          <div>
+            <h2>Private conversation</h2>
+            <p class="hint" id="peerState">Waiting for the other person…</p>
+          </div>
+        </div>
+        <button class="secondary" id="leave" type="button">Leave room</button>
+      </header>
+
+      <div id="messages" aria-live="polite"></div>
+
+      <div class="composer-wrap">
+        <form class="composer" id="form">
+          <input id="message" maxlength="2000"
+                 placeholder="Write an encrypted message…"
+                 autocomplete="off" disabled>
+          <button id="send" type="submit" disabled>Send ↗</button>
+        </form>
+        <p class="composer-note">
+          🔒 Encrypted in your browser before transmission.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <div class="warning">
+    Security note: this is a learning starter, not an audited messenger.
+    Use HTTPS/WSS. A compromised device, modified website code or an
+    intercepted identity key can still expose messages.
+  </div>
+
+  <footer class="footer">PrivateChat · A more private way to connect</footer>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let ws = null, keyPair = null, peerKey = null, joined = false, myName = "You";
+  const enc = new TextEncoder(), dec = new TextDecoder();
+
+  const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+  const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+
+  function status(s) {
+    $("status").textContent = s;
+  }
+
+  function system(s) {
+    const d = document.createElement("div");
+    d.className = "system";
+    d.textContent = s;
+    $("messages").appendChild(d);
+    $("messages").scrollTop = $("messages").scrollHeight;
+  }
+
+  function bubble(text, mine) {
+    const d = document.createElement("div");
+    d.className = "bubble" + (mine ? " mine" : "");
+    d.textContent = text;
+    $("messages").appendChild(d);
+    $("messages").scrollTop = $("messages").scrollHeight;
+  }
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  }
+
+  async function publishKey() {
+    send({
+      type: "key",
+      key: JSON.stringify(
+        await crypto.subtle.exportKey("jwk", keyPair.publicKey)
+      )
+    });
+  }
+
+  async function encryptForPeer(text) {
+    if (!peerKey) {
+      throw new Error("The other person's encryption key has not arrived yet.");
+    }
+
+    // Hybrid encryption: RSA-OAEP wraps a fresh AES-GCM key.
+    const aesKey = await crypto.subtle.generateKey(
+      { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+    );
+
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv }, aesKey, enc.encode(text)
+    );
+
+    const rawKey = await crypto.subtle.exportKey("raw", aesKey);
+    const wrappedKey = await crypto.subtle.encrypt(
+      { name: "RSA-OAEP" }, peerKey, rawKey
+    );
+
+    return JSON.stringify({
+      v: 1,
+      iv: b64(iv),
+      key: b64(wrappedKey),
+      data: b64(ciphertext)
+    });
+  }
+
+  async function decryptMessage(payload) {
+    const packet = JSON.parse(payload);
+    if (packet.v !== 1) throw new Error("Unsupported encrypted message format.");
+
+    const rawKey = await crypto.subtle.decrypt(
+      { name: "RSA-OAEP" }, keyPair.privateKey, unb64(packet.key)
+    );
+
+    const aesKey = await crypto.subtle.importKey(
+      "raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]
+    );
+
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: unb64(packet.iv) },
+      aesKey,
+      unb64(packet.data)
+    );
+
+    return dec.decode(plain);
+  }
+
+  async function start() {
+    if (!window.crypto?.subtle) {
+      alert("Web Crypto is unavailable. Use localhost or an HTTPS website.");
+      return;
+    }
+
+    const room = $("room").value.trim();
+
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(room)) {
+      alert("Use a room code of 8–64 letters, numbers, _ or -.");
+      return;
+    }
+
+    myName = $("name").value.trim().slice(0, 32) || "You";
+    $("join").disabled = true;
+    status("Generating keys…");
+
+    try {
+      keyPair = await crypto.subtle.generateKey({
+        name: "RSA-OAEP",
+        modulusLength: 3072,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256"
+      }, true, ["encrypt", "decrypt"]);
+
+      const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(`${scheme}//${location.host}`);
+
+      ws.onopen = () => send({ type: "join", room });
+
+      ws.onmessage = async ev => {
+        let m;
+        try { m = JSON.parse(ev.data); } catch { return; }
+
+        if (m.type === "joined") {
+          joined = true;
+          $("setup").style.display = "none";
+          $("chat").style.display = "flex";
+          status("Connected");
+          system("Joined room. Messages are encrypted on this device.");
+          await publishKey();
+
+        } else if (m.type === "peer-joined") {
+          $("peerState").textContent = "The other person is connected";
+          system("Other person connected. Exchanging encryption keys…");
+          await publishKey();
+
+        } else if (m.type === "key") {
+          try {
+            peerKey = await crypto.subtle.importKey(
+              "jwk",
+              JSON.parse(m.key),
+              { name: "RSA-OAEP", hash: "SHA-256" },
+              false,
+              ["encrypt"]
+            );
+
+            $("message").disabled = false;
+            $("send").disabled = false;
+            $("peerState").textContent = "Encryption key received";
+            system("Encryption key received. You can send messages.");
+          } catch {
+            system("Could not read the other person's public key.");
+          }
+
+        } else if (m.type === "ciphertext") {
+          try {
+            bubble(await decryptMessage(m.data), false);
+          } catch {
+            system("Could not decrypt an incoming message. It may not be intended for this session.");
+          }
+
+        } else if (m.type === "peer-left") {
+          peerKey = null;
+          $("message").disabled = true;
+          $("send").disabled = true;
+          $("peerState").textContent = "Other person disconnected";
+          system("The other person left. Messages are disabled until a new key is received.");
+
+        } else if (m.type === "error") {
+          system(m.message);
+        }
+      };
+
+      ws.onclose = () => {
+        status("Disconnected");
+        if (joined) system("Connection closed.");
+        $("join").disabled = false;
+        $("message").disabled = true;
+        $("send").disabled = true;
+      };
+
+      ws.onerror = () => {
+        status("Connection error");
+        system("Could not connect to the server.");
+        $("join").disabled = false;
+      };
+
+    } catch (e) {
+      status("Error");
+      $("join").disabled = false;
+      alert("Could not initialize encryption: " + e.message);
+    }
+  }
+
+  $("join").addEventListener("click", start);
+
+  $("form").addEventListener("submit", async e => {
+    e.preventDefault();
+
+    const input = $("message");
+    const text = input.value.trim();
+
+    if (!text || !peerKey) return;
+
+    try {
+      const cipher = await encryptForPeer(text);
+      send({ type: "ciphertext", data: cipher });
+      bubble(text, true);
+      input.value = "";
+    } catch (err) {
+      system(err.message || "Encryption failed.");
+    }
+  });
+
+  $("leave").addEventListener("click", () => {
+    if (ws) ws.close();
+
+    joined = false;
+    peerKey = null;
+    keyPair = null;
+    ws = null;
+
+    $("chat").style.display = "none";
+    $("setup").style.display = "grid";
+    $("messages").replaceChildren();
+    $("join").disabled = false;
+    $("message").disabled = true;
+    $("send").disabled = true;
+    $("peerState").textContent = "Waiting for the other person…";
+    status("Not connected");
+  });
+})();
+</script>
+</body>
+</html>

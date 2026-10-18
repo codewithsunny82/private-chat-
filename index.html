@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PrivateChat — encrypted room</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#121a2d;--line:#29344e;--text:#eef3ff;--muted:#9eabc5;--accent:#8b9cff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#182343,var(--bg) 55%);color:var(--text);font:16px system-ui,sans-serif;min-height:100vh;display:grid;place-items:center;padding:20px}
+main{width:min(760px,100%);background:#10182adf;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 24px 90px #0006}
+header{padding:24px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px}h1{margin:0;font-size:23px}p{color:var(--muted);margin:6px 0 0;font-size:14px}.status{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:7px 10px;color:var(--muted)}
+#setup{padding:24px;display:grid;gap:14px}.field{display:grid;gap:7px}label{font-size:13px;color:var(--muted)}input,button{font:inherit;border-radius:11px;padding:12px 14px}input{background:#0a1020;color:var(--text);border:1px solid var(--line);width:100%;outline:none}input:focus{border-color:var(--accent)}button{border:0;background:var(--accent);color:#0a1020;font-weight:700;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.hint{font-size:12px;color:var(--muted);line-height:1.5}
+#chat{display:none;padding:20px;gap:14px}#messages{height:340px;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:4px}.bubble{max-width:85%;padding:11px 13px;border:1px solid var(--line);background:#182238;border-radius:14px;overflow-wrap:anywhere;white-space:pre-wrap}.mine{align-self:flex-end;background:#252f59;border-color:#46568d}.system{align-self:center;color:var(--muted);font-size:12px;text-align:center;padding:8px}.composer{display:flex;gap:9px}.composer input{flex:1;min-width:0}.composer button{min-width:88px}.actions{display:flex;justify-content:space-between;align-items:center;gap:10px}.secondary{background:transparent;color:var(--text);border:1px solid var(--line)}.warning{color:#f0c777;font-size:12px;line-height:1.5;padding:0 24px 22px}
+@media(max-width:520px){header{padding:18px}#setup,#chat{padding:16px}#messages{height:45vh}.composer{flex-direction:column}.composer button{width:100%}}
+</style>
+</head>
+<body><main>
+<header><div><h1>PrivateChat</h1><p>Two people. Encrypted messages. No message history on the server.</p></div><span class="status" id="status">Not connected</span></header>
+<section id="setup">
+<div class="field"><label for="room">Private room code (share it privately)</label><input id="room" autocomplete="off" minlength="8" maxlength="64" placeholder="e.g. use-a-long-random-code"></div>
+<div class="field"><label for="name">Your display name</label><input id="name" autocomplete="nickname" maxlength="32" placeholder="You"></div>
+<button id="join">Join secure room</button>
+<p class="hint">Both people must use the same room code. Anyone who learns the code may try to join before the room is full, so use a long, random code and share it through a separate trusted channel.</p>
+</section>
+<section id="chat">
+<div class="actions"><span class="hint" id="peerState">Waiting for the other person…</span><button class="secondary" id="leave">Leave room</button></div>
+<div id="messages" aria-live="polite"></div>
+<form class="composer" id="form"><input id="message" maxlength="2000" placeholder="Write an encrypted message…" autocomplete="off" disabled><button id="send" disabled>Send</button></form>
+<p class="hint">Messages are encrypted in your browser with the recipient’s public key before transmission. This starter does not verify identities with fingerprints or safety numbers.</p>
+</section>
+<div class="warning">Security note: this is a learning starter, not a security-audited messenger. Deploy only over HTTPS/WSS. A compromised device, malicious modified website code, or an intercepted identity key can still expose messages.</div>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let ws = null, keyPair = null, peerKey = null, joined = false, myName = "You";
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+  const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+  function status(s){ $("status").textContent=s; }
+  function system(s){ const d=document.createElement("div"); d.className="system"; d.textContent=s; $("messages").appendChild(d); $("messages").scrollTop=$("messages").scrollHeight; }
+  function bubble(text, mine){ const d=document.createElement("div"); d.className="bubble"+(mine?" mine":""); d.textContent=text; $("messages").appendChild(d); $("messages").scrollTop=$("messages").scrollHeight; }
+  function send(obj){ if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+  async function publishKey(){ send({type:"key",key:JSON.stringify(await crypto.subtle.exportKey("jwk",keyPair.publicKey))}); }
+  async function encryptForPeer(text){
+    if(!peerKey) throw new Error("The other person's encryption key has not arrived yet.");
+    // Hybrid encryption: RSA-OAEP wraps a fresh AES-GCM key; AES-GCM encrypts the message.
+    const aesKey=await crypto.subtle.generateKey({name:"AES-GCM",length:256},true,["encrypt","decrypt"]);
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv},aesKey,enc.encode(text));
+    const rawKey=await crypto.subtle.exportKey("raw",aesKey);
+    const wrappedKey=await crypto.subtle.encrypt({name:"RSA-OAEP"},peerKey,rawKey);
+    return JSON.stringify({v:1,iv:b64(iv),key:b64(wrappedKey),data:b64(ciphertext)});
+  }
+  async function decryptMessage(payload){
+    const packet=JSON.parse(payload);
+    if(packet.v!==1) throw new Error("Unsupported encrypted message format.");
+    const rawKey=await crypto.subtle.decrypt({name:"RSA-OAEP"},keyPair.privateKey,unb64(packet.key));
+    const aesKey=await crypto.subtle.importKey("raw",rawKey,{name:"AES-GCM"},false,["decrypt"]);
+    const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(packet.iv)},aesKey,unb64(packet.data));
+    return dec.decode(plain);
+  }
+  async function start(){
+    if(!window.crypto?.subtle){ alert("Web Crypto is unavailable. Use localhost or an HTTPS website."); return; }
+    const room=$("room").value.trim();
+    if(!/^[A-Za-z0-9_-]{8,64}$/.test(room)){ alert("Use a room code of 8–64 letters, numbers, _ or -."); return; }
+    myName=$("name").value.trim().slice(0,32)||"You";
+    $("join").disabled=true; status("Generating keys…");
+    try {
+      keyPair=await crypto.subtle.generateKey({name:"RSA-OAEP",modulusLength:3072,publicExponent:new Uint8Array([1,0,1]),hash:"SHA-256"},true,["encrypt","decrypt"]);
+      const scheme=location.protocol==="https:"?"wss:":"ws:";
+      ws=new WebSocket(`${scheme}//${location.host}`);
+      ws.onopen=()=>send({type:"join",room});
+      ws.onmessage=async ev=>{
+        let m; try{m=JSON.parse(ev.data)}catch{return}
+        if(m.type==="joined"){
+          joined=true; $("setup").style.display="none"; $("chat").style.display="grid"; status("Connected"); system("Joined room. Messages are encrypted on this device.");
+          await publishKey();
+        } else if(m.type==="peer-joined"){
+          $("peerState").textContent="The other person is connected";
+          system("Other person connected. Exchange encryption keys…");
+          await publishKey();
+        } else if(m.type==="key"){
+          try { peerKey=await crypto.subtle.importKey("jwk",JSON.parse(m.key),{name:"RSA-OAEP",hash:"SHA-256"},false,["encrypt"]); $("message").disabled=false; $("send").disabled=false; $("peerState").textContent="Encryption key received"; system("Encryption key received. You can send messages."); }
+          catch { system("Could not read the other person's public key."); }
+        } else if(m.type==="ciphertext"){
+          try { bubble(await decryptMessage(m.data),false); }
+          catch { system("Could not decrypt an incoming message. It may not be intended for this session."); }
+        } else if(m.type==="peer-left"){
+          peerKey=null; $("message").disabled=true; $("send").disabled=true; $("peerState").textContent="Other person disconnected"; system("The other person left. New messages are disabled until a new key is received.");
+        } else if(m.type==="error"){ system(m.message); }
+      };
+      ws.onclose=()=>{status("Disconnected"); if(joined) system("Connection closed."); $("join").disabled=false; $("message").disabled=true; $("send").disabled=true;};
+      ws.onerror=()=>{status("Connection error"); system("Could not connect to the server."); $("join").disabled=false;};
+    } catch(e){ status("Error"); $("join").disabled=false; alert("Could not initialize encryption: "+e.message); }
+  }
+  $("join").addEventListener("click",start);
+  $("form").addEventListener("submit",async e=>{
+    e.preventDefault(); const input=$("message"), text=input.value.trim();
+    if(!text||!peerKey)return;
+    try { const cipher=await encryptForPeer(text); send({type:"ciphertext",data:cipher}); bubble(text,true); input.value=""; }
+    catch(err){system(err.message||"Encryption failed.");}
+  });
+  $("leave").addEventListener("click",()=>{if(ws)ws.close(); joined=false;peerKey=null;keyPair=null;$("chat").style.display="none";$("setup").style.display="grid";$("messages").replaceChildren();$("join").disabled=false;status("Not connected");});
+})();
+</script></body></html>
